@@ -1,0 +1,6 @@
+.git
+target
+.gradle
+traccar-web/node_modules
+traccar-web/build
+traccar-web/.git

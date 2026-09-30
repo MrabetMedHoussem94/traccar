@@ -1,0 +1,31 @@
+# Builds Traccar (server + web) from this working tree, so local modifications are included.
+# Build context: repository root (with the traccar-web submodule checked out).
+
+FROM node:22 AS web
+RUN npm install -g npm@12.1.0
+WORKDIR /src/traccar-web
+COPY traccar-web/.npmrc traccar-web/package.json traccar-web/package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY traccar-web/ ./
+RUN npm run build
+
+FROM eclipse-temurin:21-jdk AS server
+WORKDIR /src
+COPY gradle gradle
+COPY gradlew build.gradle settings.gradle ./
+RUN ./gradlew --no-daemon --version
+COPY openapi.yaml ./
+COPY src src
+RUN ./gradlew --no-daemon assemble -x test
+
+FROM eclipse-temurin:21-jre
+WORKDIR /opt/traccar
+COPY --from=server /src/target/tracker-server.jar ./
+COPY --from=server /src/target/lib ./lib
+COPY --from=web /src/traccar-web/build ./web
+COPY --from=web /src/traccar-web/src/resources/l10n ./templates/translations
+COPY schema ./schema
+COPY templates ./templates
+COPY setup/traccar.xml ./conf/traccar.xml
+ENTRYPOINT ["java", "-XX:+ExitOnOutOfMemoryError"]
+CMD ["-jar", "tracker-server.jar", "conf/traccar.xml"]
